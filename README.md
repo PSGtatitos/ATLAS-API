@@ -14,7 +14,7 @@ A voice-activated AI assistant powered by **Vosk** for speech recognition, **Cla
 - 🗣️ **Natural Voice Output** - Edge TTS with British male voice (JARVIS-like)
 - 💬 **Conversation Memory** - Maintains context across interactions
 - 🔇 **Noise Filtering** - Automatically ignores keyboard sounds, breathing, etc.
-- 🌍 **Multi-language Support** - English and Greek transcription models
+- 🌍 **Multi-language Support** - English and Greek transcription models (coming soon!!!)
 
 ## 📋 Prerequisites
 
