@@ -58,7 +58,7 @@ Create a `.env` file:
 
 ```env
 # Groq API Key (required)
-GROQ_API_KEY=your_openrouter_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
 
 # Vosk Model Paths (at least one required)
 VOSK_MODEL_PATH_EN=C:/path/to/vosk-model-small-en-us-0.15
