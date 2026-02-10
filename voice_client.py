@@ -158,6 +158,14 @@ STOP_PHRASES = [
     "goodbye"
 ]
 
+# Wake words to bring ATLAS out of hibernate mode
+WAKE_WORDS = [
+    "atlas",
+    "hey atlas",
+    "ok atlas",
+    "hello atlas",
+]
+
 # Recording settings
 RATE = 16000
 CHANNELS = 1
@@ -255,6 +263,59 @@ def record_command():
     return audio_base64, last_text, stop_detected
 
 # ────────────────────────────────────────────────
+# HIBERNATE MODE
+# ────────────────────────────────────────────────
+
+def hibernate_mode():
+    """Enter low-power listening mode. Only responds to wake words.
+    Returns True when a wake word is detected, False on error."""
+    print("\n💤 ATLAS is now in hibernate mode...")
+    print("💡 Say a wake word to reactivate (e.g., 'Hey Atlas')\n")
+
+    model = Model(MODEL_PATH)
+    rec = KaldiRecognizer(model, RATE)
+
+    p = pyaudio.PyAudio()
+    stream = p.open(format=FORMAT,
+                    channels=CHANNELS,
+                    rate=RATE,
+                    input=True,
+                    frames_per_buffer=CHUNK)
+
+    try:
+        while True:
+            data = stream.read(CHUNK, exception_on_overflow=False)
+            if rec.AcceptWaveform(data):
+                result = json.loads(rec.Result())
+                text = result.get("text", "").strip().lower()
+                if text and any(wake.lower() in text for wake in WAKE_WORDS):
+                    print(f"\n🔔 Wake word detected: '{text}'")
+                    stream.stop_stream()
+                    stream.close()
+                    p.terminate()
+                    return True
+            else:
+                partial = json.loads(rec.PartialResult())
+                ptext = partial.get("partial", "").strip().lower()
+                if ptext and any(wake.lower() in ptext for wake in WAKE_WORDS):
+                    print(f"\n🔔 Wake word detected (partial): '{ptext}'")
+                    stream.stop_stream()
+                    stream.close()
+                    p.terminate()
+                    return True
+    except KeyboardInterrupt:
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+        raise  # Re-raise so main() can handle the Ctrl+C exit
+    except Exception as e:
+        print(f"❌ Hibernate error: {e}")
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+        return True  # Return to active mode on error so we don't get stuck
+
+# ────────────────────────────────────────────────
 # MAIN LOOP
 # ────────────────────────────────────────────────
 
@@ -262,19 +323,26 @@ def main():
     global conversation_history
     
     print("🎤 Starting ATLAS voice assistant...\n")
-    print("💡 Say 'goodbye' or 'αντίο' to exit\n")
+    print("💡 Say 'goodbye' to hibernate, then 'Hey Atlas' to wake up\n")
 
     try:
         while True:
             # Record until stop phrase detected
             audio_b64, last_text, stop_detected = record_command()
             
-            # Check if user wants to exit
+            # Check if user wants to hibernate
             if stop_detected and last_text:
                 if any(phrase.lower() in last_text.lower() for phrase in STOP_PHRASES):
-                    speak("Goodbye! Shutting down.")
-                    print("👋 Stop phrase detected. Exiting.\n")
-                    break
+                    speak("Going to sleep. Say 'Hey Atlas' when you need me.")
+                    print("� Stop phrase detected. Entering hibernate mode...\n")
+                    
+                    # Enter hibernate — blocks until wake word is heard
+                    hibernate_mode()
+                    
+                    # Wake word detected — resume active mode
+                    speak("I'm back. How can I help you?")
+                    print("\n🟢 ATLAS is active again!\n")
+                    continue
             
             if not audio_b64:
                 # Silently restart - don't announce noise
