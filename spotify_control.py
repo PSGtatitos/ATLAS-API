@@ -122,7 +122,7 @@ def play_playlist(playlist_name):
         playlists = sp.current_user_playlists(limit=50)
 
         for playlist in playlists['items']:
-            if playlist_name.lower() in playlists['name'].lower():
+            if playlist_name.lower() in playlist['name'].lower():
                 sp.start_playback(context_uri=playlist['uri'])
                 return f"Playing playlist {playlist['name']}"
         
