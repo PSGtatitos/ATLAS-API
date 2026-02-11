@@ -79,3 +79,6 @@ vosk-model*/
 
 # PowerShell scripts (helper)
 list_voices.ps1
+
+# Added spotify cache directory
+.spotify_cache

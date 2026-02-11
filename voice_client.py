@@ -17,7 +17,7 @@ import tempfile
 import uuid
 import winsound
 
-SetLogLevel(0)
+SetLogLevel(-1)
 
 # TTS setup (offline)
 tts_engine = pyttsx3.init('sapi5')  # Use Windows SAPI5 directly
@@ -25,11 +25,12 @@ tts_engine.setProperty('volume', 0.9)
 
 # Get available voices
 available_voices = tts_engine.getProperty('voices')
-print(f"[TTS] Available voices: {[v.name for v in available_voices]}")
+# print(f"[TTS] Available voices: {[v.name for v in available_voices]}")
 
 import subprocess
 import asyncio
 import edge_tts
+os.environ['PYGAME_HIDE_SUPPORT_PROMPT'] = "1"
 import pygame
 
 # Initialize pygame mixer for audio playback
@@ -51,8 +52,8 @@ async def _edge_speak(text, voice=EDGE_VOICE):
 def speak(text):
     """Speak text using Edge TTS (JARVIS-like British voice)"""
     try:
-        print(f"[TTS] Speaking: {text}")
-        print(f"[TTS] Using Edge TTS voice: {EDGE_VOICE}")
+        print(f"🗣 Speaking: {text}")
+        # print(f"[TTS] Using Edge TTS voice: {EDGE_VOICE}")
         
         # Run async Edge TTS
         loop = asyncio.new_event_loop()
@@ -62,10 +63,10 @@ def speak(text):
         finally:
             loop.close()
         
-        print(f"[TTS] Audio file created: {audio_file}")
+        # print(f"[TTS] Audio file created: {audio_file}")
         
         # Play using pygame
-        print(f"[TTS] Playing audio via pygame...")
+        # print(f"[TTS] Playing audio via pygame...")
         pygame.mixer.music.load(audio_file)
         pygame.mixer.music.play()
         
@@ -73,7 +74,7 @@ def speak(text):
         while pygame.mixer.music.get_busy():
             pygame.time.wait(100)
         
-        print(f"[TTS] Playback finished")
+        # print(f"[TTS] Playback finished")
         
         # Clean up temp file
         try:
@@ -322,8 +323,13 @@ def hibernate_mode():
 def main():
     global conversation_history
     
-    print("🎤 Starting ATLAS voice assistant...\n")
-    print("💡 Say 'goodbye' to hibernate, then 'Hey Atlas' to wake up\n")
+    print(""" ---------------------------------------------------------
+    🎤 Starting ATLAS voice assistant...\n
+    """)
+    print("""
+    💡 Say 'goodbye' to hibernate, then 'Hey Atlas' to wake up\n
+---------------------------------------------------------
+    """)
 
     try:
         while True:
