@@ -1,6 +1,6 @@
 # 🤖 ATLAS - AI Voice Assistant
 
-A voice-activated AI assistant powered by **Vosk** for speech recognition, **Claude** (via OpenRouter) for AI responses, and **Edge TTS** for natural-sounding speech synthesis.
+A voice-activated AI assistant powered by **Vosk** for speech recognition, **Groq** for AI responses, and **Edge TTS** for natural-sounding speech synthesis.
 
 ![ATLAS Banner](https://img.shields.io/badge/ATLAS-Voice%20Assistant-blue?style=for-the-badge)
 ![Node.js](https://img.shields.io/badge/Node.js-18+-green?style=flat-square)
@@ -10,7 +10,7 @@ A voice-activated AI assistant powered by **Vosk** for speech recognition, **Cla
 ## ✨ Features
 
 - 🎤 **Offline Speech Recognition** - Uses Vosk for fast, private transcription
-- 🧠 **AI-Powered Responses** - Claude Sonnet via OpenRouter API
+- 🧠 **AI-Powered Responses** - Groq's free API
 - 🗣️ **Natural Voice Output** - Edge TTS with British male voice (JARVIS-like)
 - 💬 **Conversation Memory** - Maintains context across interactions
 - 🔇 **Noise Filtering** - Automatically ignores keyboard sounds, breathing, etc.
@@ -21,7 +21,7 @@ A voice-activated AI assistant powered by **Vosk** for speech recognition, **Cla
 - **Node.js** 18+
 - **Python** 3.10+
 - **Vosk Model** (download from [alphacephei.com/vosk/models](https://alphacephei.com/vosk/models))
-- **OpenRouter API Key** (get one at [openrouter.ai](https://openrouter.ai))
+- **Groq API Key** (get one at [console.groq.com](https://console.groq.com/keys))
 
 ## 🚀 Quick Start
 
@@ -57,8 +57,8 @@ unzip vosk-model-small-en-us-0.15.zip
 Create a `.env` file:
 
 ```env
-# OpenRouter API Key (required)
-OPENROUTER_API_KEY=your_openrouter_api_key_here
+# Groq API Key (required)
+GROQ_API_KEY=your_groq_api_key_here
 
 # Vosk Model Paths (at least one required)
 VOSK_MODEL_PATH_EN=C:/path/to/vosk-model-small-en-us-0.15
@@ -119,7 +119,7 @@ Transcribe audio to text using Vosk.
 
 ### `POST /api/ask`
 
-Get an AI response from Claude.
+Get an AI response from Groq.
 
 ```json
 {
@@ -200,6 +200,5 @@ MIT License - feel free to use and modify!
 ## 🙏 Credits
 
 - [Vosk](https://alphacephei.com/vosk/) - Offline speech recognition
-- [OpenRouter](https://openrouter.ai/) - AI model routing
+- [Groq](https://console.groq.com/keys)) - AI model routing
 - [Edge TTS](https://github.com/rany2/edge-tts) - Microsoft Edge text-to-speech
-- [Claude](https://anthropic.com/) - AI assistant by Anthropic
