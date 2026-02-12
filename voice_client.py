@@ -16,8 +16,48 @@ import pyttsx3
 import tempfile
 import uuid
 import winsound
+from spotify_control import (
+    search_and_play,
+    play_pause,
+    next_track,
+    previous_track,
+    get_current_track,
+    set_volume,
+    play_playlist
+)
+from num2words import num2words
+import re
 
 SetLogLevel(-1)
+
+def format_numbers_for_speech(text):
+    """Convert numbers to words for better TTS pronunciation"""
+    
+    # Handle decimals (e.g., "23.5" -> "twenty-three point five")
+    def replace_decimal(match):
+        number = match.group(0)
+        parts = number.split('.')
+        if len(parts) == 2:
+            whole = num2words(int(parts[0]), lang='en')
+            decimal = num2words(int(parts[1]), lang='en')
+            return f"{whole} point {decimal}"
+        return num2words(int(number), lang='en')
+    
+    # Replace decimal numbers
+    text = re.sub(r'\b\d+\.\d+\b', replace_decimal, text)
+    
+    # Handle whole numbers (e.g., "65" -> "sixty-five")
+    def replace_whole(match):
+        return num2words(int(match.group(0)), lang='en')
+    
+    text = re.sub(r'\b\d+\b', replace_whole, text)
+    
+    # Handle units
+    text = text.replace('°C', ' degrees Celsius')
+    text = text.replace('%', ' percent')
+    
+    return text
+
 
 # TTS setup (offline)
 tts_engine = pyttsx3.init('sapi5')  # Use Windows SAPI5 directly
@@ -319,6 +359,76 @@ def hibernate_mode():
 # ────────────────────────────────────────────────
 # MAIN LOOP
 # ────────────────────────────────────────────────
+def parse_music_command(transcription):
+    """Use AI to parse unclear voice commands"""
+    import requests
+    
+    try:
+        # Ask Groq to interpret the command
+        response = requests.post(
+            "http://localhost:3000/api/ask",
+            json={
+                "text": f"This voice command was transcribed with errors: '{transcription}'. What music action is the user trying to do? Reply with ONLY ONE of: 'play [song/artist name]', 'pause', 'next', 'previous', 'volume up', 'volume down', 'playlist [name]', or 'unknown'",
+                "context": {},
+                "conversationHistory": []
+            },
+            timeout=10
+        )
+        
+        cleaned = response.json()['response'].strip().lower()
+        return cleaned
+        
+    except:
+        return transcription
+
+def handle_music_command(transcription):
+    """Check if user wants to control music and handle it directly"""
+    text_lower = transcription.lower()
+
+    #Play specific song/artist
+    if ("play " in text_lower) and "spotify" not in text_lower and "playlist" not in text_lower:
+        #Extract what to play
+        if "play" in text_lower:
+            query = text_lower.split("play", 1)[1].strip()
+        else:
+            return None
+        return search_and_play(query)
+    
+    #Pause/Resume
+    if "pause" in text_lower or "stop music" in text_lower:
+        return play_pause()
+
+    if "resume" in text_lower or "continue" in text_lower:
+        return play_pause()
+    
+    #Skip
+    if "next" in text_lower or "skip" in text_lower:
+        return next_track()
+    
+    if "previous" in text_lower or "back" in text_lower:
+        return previous_track()
+    
+    #Current track
+    if "what's playing" in text_lower or "what song" in text_lower or "current song" in text_lower:
+        return get_current_track()
+    
+    #Volume
+    if "volume" in text_lower:
+        if "up" in text_lower or "increase" in text_lower:
+            return set_volume(80)
+        elif "down" in text_lower or "decrease" in text_lower:
+            return set_volume(30)
+        elif "max" in text_lower or "full" in text_lower:
+            return set_volume(100)
+    
+    #Playlist
+    if "playlist" in text_lower:
+        if "play playlist" in text_lower:
+            playlist_name = text_lower.split("play playlist ", 1)[1].strip()
+            return play_playlist(playlist_name)
+    
+    return None #Not a music command
+
 
 def main():
     global conversation_history
@@ -385,6 +495,17 @@ def main():
                     continue
 
                 print(f"👤 You: {transcription}")
+                if any(word in transcription.lower() for word in ["play", "playlist", "pause", "next"]):
+                    cleaned = parse_music_command(transcription)
+                    print(f"🧹 Cleaned: {cleaned}")
+                    music_response = handle_music_command(cleaned)
+                else:
+                    music_response = handle_music_command(transcription)
+                music_response = handle_music_command(transcription)
+                if music_response:
+                    print(f"🎵 Spotify: {music_response}")
+                    speak(music_response)
+                    continue # Skip sending to AI, just handle music
 
                 # Send to /api/ask with conversation history
                 # Build a copy of the conversation history and prepend a system instruction
