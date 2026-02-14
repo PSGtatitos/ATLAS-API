@@ -20,7 +20,7 @@ sp = spotipy.Spotify(auth_manager=SpotifyOAuth(
     scope=" ".join(SCOPES),  # Fix: Use space-separated scopes
     cache_path=".spotify_cache"
 ))
-
+   
 def get_current_track():
     """Get currently playing track info"""
     try:

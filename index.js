@@ -1,131 +1,89 @@
+//Imports
 const express = require('express');
-const { spawn, execSync } = require('child_process');
+const { spawn, execSync, exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 require('dotenv/config');
-
+const axios = require('axios');
+const FormData = require('form-data');
+const { platform } = require('os');
+const { stderr } = require('process');
 const app = express();
+
 app.use(express.json({ limit: '50mb' }));
 
-app.post('/api/transcribe', async (req, res) => {
+//Groq Transcription Endpoint
+app.post('/api/transcribe-groq', async (req, res) => {
+  const tempFile = path.join(__dirname, 'temp_groq_audio.wav');
+  
   try {
     const { audio } = req.body;
-
+    
     if (!audio) {
       return res.status(400).json({ error: 'Missing audio parameter' });
     }
-
-    console.log('Transcribing with Vosk...');
-    console.log('Audio data length:', audio.length);
-
+    
+    console.log('Transcribing with Groq Whisper...');
+    
     // Convert base64 to buffer
     const audioBuffer = Buffer.from(audio, 'base64');
     console.log('Audio buffer size:', audioBuffer.length, 'bytes');
-
-    // Validate RIFF WAV header
-    if (audioBuffer.length < 12 || audioBuffer.toString('ascii', 0, 4) !== 'RIFF' || audioBuffer.toString('ascii', 8, 12) !== 'WAVE') {
-      console.error('Audio is not a valid WAV file (missing RIFF header)');
-      return res.status(400).json({ error: 'Audio must be a valid WAV file (RIFF format)' });
+    
+    // Validate WAV
+    if (audioBuffer.length < 12 || audioBuffer.toString('ascii', 0, 4) !== 'RIFF') {
+      return res.status(400).json({ error: 'Invalid WAV file' });
     }
-
-    // Create temp file path
-    const tempFile = path.join(__dirname, 'temp_audio.wav');
-    console.log('Temp file path:', tempFile);
-
-    // Write the file
+    
+    // Save to temp file
     fs.writeFileSync(tempFile, audioBuffer);
-    console.log('Temp file written successfully');
-
-    // Verify file exists
-    if (!fs.existsSync(tempFile)) {
-      return res.status(500).json({ error: 'Failed to create temp audio file' });
-    }
-
-    const pythonScript = path.join(__dirname, 'vosk_transcribe.py');
-
-    // Support multiple Vosk models via env vars:
-    // VOSK_MODEL_PATH (legacy), or VOSK_MODEL_PATH_EN and VOSK_MODEL_PATH_EL
-    const modelEnvDefault = process.env.VOSK_MODEL_PATH;
-    const modelEn = process.env.VOSK_MODEL_PATH_EN;
-    const modelEl = process.env.VOSK_MODEL_PATH_EL;
-
-    // Allow clients to request language via `language` or `lang` in the body
-    const reqLang = (req.body.language || req.body.lang || '').toString().toLowerCase();
-    let modelPath;
-    if (reqLang === 'el' || reqLang === 'greek' || reqLang === 'gr') {
-      modelPath = modelEl || modelEnvDefault || modelEn;
-    } else if (reqLang === 'en' || reqLang === 'english') {
-      modelPath = modelEn || modelEnvDefault || modelEl;
-    } else {
-      // No explicit language requested: prefer default env, then English, then Greek
-      modelPath = modelEnvDefault || modelEn || modelEl;
-    }
-
-    console.log('Python script:', pythonScript);
-    console.log('Requested language:', reqLang || '(auto)');
-
-    if (!modelPath && !modelEn && !modelEl) {
-      try { fs.unlinkSync(tempFile); } catch (e) { }
-      return res.status(500).json({ error: 'No Vosk model configured. Set VOSK_MODEL_PATH or VOSK_MODEL_PATH_EN/VOSK_MODEL_PATH_EL in .env' });
-    }
-
-    // Helper to run the python transcription and collect stdout/stderr
-    const runPython = (mpath) => new Promise((resolve) => {
-      const proc = spawn('python', [pythonScript, tempFile, mpath]);
-      let out = '';
-      let err = '';
-      proc.stdout.on('data', (d) => { out += d.toString(); });
-      proc.stderr.on('data', (d) => { err += d.toString(); });
-      proc.on('close', (code) => resolve({ code, out: out.trim(), err }));
-      proc.on('error', (e) => resolve({ code: 1, out: '', err: String(e) }));
-    });
-
-    // Auto-detect strategy when language not explicitly requested and both models exist
-    let finalTranscription = '';
-    let finalLang = reqLang || '';
-
-    const tryModels = async () => {
-      // Build candidate list depending on availability and preference
-      const candidates = [];
-      if (modelPath) candidates.push({ path: modelPath, tag: reqLang || 'default' });
-      // If no explicit modelPath or we want to try both, add en/el if available
-      if (modelEn && (!candidates.find(c => c.path === modelEn))) candidates.push({ path: modelEn, tag: 'en' });
-      if (modelEl && (!candidates.find(c => c.path === modelEl))) candidates.push({ path: modelEl, tag: 'el' });
-
-      for (const candidate of candidates) {
-        console.log('Trying model:', candidate.path, 'tag:', candidate.tag);
-        const result = await runPython(candidate.path);
-        console.log('python result code', result.code, 'out len', result.out.length);
-        if (result.code === 0 && result.out && result.out.length > 0) {
-          // If contains Greek characters, mark as Greek
-          const hasGreek = /[\u0370-\u03FF]/.test(result.out);
-          finalTranscription = result.out;
-          finalLang = hasGreek ? 'el' : 'en';
-          return { ok: true };
+    
+    // Create FormData
+    const form = new FormData();
+    form.append('file', fs.createReadStream(tempFile), 'audio.wav');
+    form.append('model', 'whisper-large-v3');
+    form.append('language', 'en');
+    
+    // Send with axios
+    const response = await axios.post(
+      'https://api.groq.com/openai/v1/audio/transcriptions',
+      form,
+      {
+        headers: {
+          'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
+          ...form.getHeaders()
         }
-        // else continue to next candidate
       }
-      return { ok: false };
-    };
-
-    const tried = await tryModels();
-
-    // Clean up temp file
-    try { if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile); } catch (e) { console.error('Cleanup failed', e); }
-
-    if (!tried.ok) {
-      return res.status(500).json({ error: 'Vosk transcription failed', details: 'No model produced output' });
-    }
-
-    console.log('Transcription result:', finalTranscription, 'lang:', finalLang);
-    return res.json({ transcription: finalTranscription, language: finalLang, success: true });
-
+    );
+    
+    // Clean up
+    try {
+      fs.unlinkSync(tempFile);
+    } catch (e) {}
+    
+    const transcription = response.data.text.trim();
+    console.log('Transcription:', transcription);
+    
+    const hasGreek = /[\u0370-\u03FF]/.test(transcription);
+    
+    res.json({ 
+      transcription: transcription,
+      language: hasGreek ? 'el' : 'en',
+      success: true 
+    });
+    
   } catch (error) {
-    console.error('Transcription error:', error);
-    res.status(500).json({ error: error.message, stack: error.stack });
+    console.error('Error:', error.response?.data || error.message);
+    
+    try {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    } catch (e) {}
+    
+    res.status(500).json({ 
+      error: error.response?.data?.error?.message || error.message 
+    });
   }
 });
-
+//Ask Endpoint
 app.post('/api/ask', async (req, res) => {
   try {
     console.log('Received request with keys:', Object.keys(req.body));
@@ -237,6 +195,61 @@ app.post('/api/ask', async (req, res) => {
 // Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
+});
+
+// System commands endpoint
+app.post('/api/system-commands', async (req, res) => {
+  try {
+    const { action, parameter } = req.body;
+
+    console.log(`💻 System command: ${action} ${parameter || ''}`);
+
+    let command;
+
+    switch (action) {
+      case 'open-url':
+        //  Open URL in browser
+        const url = parameter;
+        if (process.platform === 'win32') {
+          command = `open "${url}"`;
+        }
+        break;
+
+        case 'open-app':
+          // Open Applications
+          const app = parameter;
+          if (process.platform === 'win32') {
+            command = `start "" "${app}"`;
+          }
+        break;
+
+        case 'search-google':
+          // Google Search
+          const query = encodeURIComponent(parameter);
+          const search_url = `https://google.com/search?q=${query}`
+          if (process.platform === 'win32') {
+            command = `start "" "${search_url}"`
+          }
+          break;
+
+          default:
+            return res.status(400).json({ error: 'Unknown action'});
+    }
+    exec(command, (error, stdout, stderr) => {
+      if (error) {
+        console.error('❌ Command error:', error);
+        return res.status(500).json({ error: error.message });
+      }
+      console.log(`✅ Executed: ${action}`);
+      res.json({
+        success: true,
+        message: `Executed: ${action}`
+      });
+    });
+  } catch (error) {
+    console.error('System command error:', error);
+    res.status(500).json({ error: error.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;

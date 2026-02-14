@@ -140,6 +140,9 @@ def speak(text):
         except Exception as e2:
             print(f"[TTS] Fallback also failed: {e2}")
 
+# Global variable to track playback state
+is_playing = False
+
 # ────────────────────────────────────────────────
 # CONFIG
 # ────────────────────────────────────────────────
@@ -383,36 +386,49 @@ def parse_music_command(transcription):
 
 def handle_music_command(transcription):
     """Check if user wants to control music and handle it directly"""
+    global is_playing
     text_lower = transcription.lower()
 
-    #Play specific song/artist
+    # Play specific song/artist
     if ("play " in text_lower) and "spotify" not in text_lower and "playlist" not in text_lower:
-        #Extract what to play
+        # Extract what to play
         if "play" in text_lower:
             query = text_lower.split("play", 1)[1].strip()
         else:
             return None
+        is_playing = True  # Assume playback starts
         return search_and_play(query)
-    
-    #Pause/Resume
-    if "pause" in text_lower or "stop music" in text_lower:
-        return play_pause()
 
+    # Pause
+    if "pause" in text_lower or "stop music" in text_lower:
+        if is_playing:
+            is_playing = False
+            return play_pause()
+        else:
+            print("Music is already paused.")
+            return "Music is already paused."
+
+    # Resume
     if "resume" in text_lower or "continue" in text_lower:
-        return play_pause()
-    
-    #Skip
+        if not is_playing:
+            is_playing = True
+            return play_pause()
+        else:
+            print("Music is already playing.")
+            return "Music is already playing."
+
+    # Skip
     if "next" in text_lower or "skip" in text_lower:
         return next_track()
-    
+
     if "previous" in text_lower or "back" in text_lower:
         return previous_track()
-    
-    #Current track
+
+    # Current track
     if "what's playing" in text_lower or "what song" in text_lower or "current song" in text_lower:
         return get_current_track()
-    
-    #Volume
+
+    # Volume
     if "volume" in text_lower:
         if "up" in text_lower or "increase" in text_lower:
             return set_volume(80)
@@ -420,15 +436,117 @@ def handle_music_command(transcription):
             return set_volume(30)
         elif "max" in text_lower or "full" in text_lower:
             return set_volume(100)
-    
-    #Playlist
+
+    # Playlist
     if "playlist" in text_lower:
-        if "play playlist" in text_lower:
-            playlist_name = text_lower.split("play playlist ", 1)[1].strip()
-            return play_playlist(playlist_name)
-    
+        if "play playlist " in text_lower:
+            parts = text_lower.split("play playlist ", 1)
+            if len(parts) > 1 and parts[1].strip():
+                playlist_name = parts[1].strip()
+                is_playing = True  # Assume playback starts
+                return play_playlist(playlist_name)
+            else:
+                print("Error: Playlist name not provided.")
+                return "Error: Playlist name not provided."
+
     return None #Not a music command
 
+def handle_system_command(transcription):
+    """Handle computer control commands - DYNAMIC VERSION"""
+    text_lower = transcription.lower()
+    
+    # DYNAMIC: Open any website
+    if "open website" in text_lower or "go to" in text_lower:
+        # Extract website name
+        if "open website" in text_lower:
+            site = text_lower.split("open website", 1)[1].strip()
+        else:
+            site = text_lower.split("go to", 1)[1].strip()
+        
+        # Add .com if no extension
+        if "." not in site:
+            site = f"{site}.com"
+        
+        # Add https:// if missing
+        if not site.startswith("http"):
+            site = f"https://{site}"
+        
+        try:
+            r = requests.post(f"{API_URL}/api/system-command",
+                            json={"action": "open-url", "parameter": site},
+                            timeout=5)
+            return f"Opening {site}"
+        except:
+            return f"Failed to open {site}"
+    
+    # SHORTCUT: Common websites (no need to say "open website")
+    common_sites = {
+        "youtube": "https://youtube.com",
+        "google": "https://google.com",
+        "netflix": "https://netflix.com",
+        "facebook": "https://facebook.com",
+        "twitter": "https://twitter.com",
+        "reddit": "https://reddit.com",
+        "instagram": "https://instagram.com",
+        "gmail": "https://gmail.com",
+        "spotify": "https://open.spotify.com",
+        "amazon": "https://amazon.com",
+        "github": "https://github.com"
+    }
+    
+    for site_name, url in common_sites.items():
+        if f"open {site_name}" in text_lower:
+            try:
+                r = requests.post(f"{API_URL}/api/system-command",
+                                json={"action": "open-url", "parameter": url},
+                                timeout=5)
+                return f"Opening {site_name}"
+            except:
+                return f"Failed to open {site_name}"
+    
+    # DYNAMIC: Search Google
+    if "search for" in text_lower or "google search" in text_lower or "search" in text_lower:
+        # Extract query
+        if "search for" in text_lower:
+            query = text_lower.split("search for", 1)[1].strip()
+        elif "google search" in text_lower:
+            query = text_lower.split("google search", 1)[1].strip()
+        else:
+            query = text_lower.split("search", 1)[1].strip()
+        
+        if query:
+            try:
+                r = requests.post(f"{API_URL}/api/system-command",
+                                json={"action": "search-google", "parameter": query},
+                                timeout=5)
+                return f"Searching for {query}"
+            except:
+                return "Failed to search"
+    
+    # DYNAMIC: Open any application
+    if "open " in text_lower or "launch " in text_lower:
+        # Extract app name
+        if "open " in text_lower:
+            app = text_lower.split("open ", 1)[1].strip()
+        else:
+            app = text_lower.split("launch ", 1)[1].strip()
+        
+        # Remove common filler words
+        app = app.replace("app", "").replace("application", "").strip()
+        
+        # Skip if it's a website or music command
+        if app in ["youtube", "google", "netflix", "facebook"] or "playlist" in app:
+            return None
+        
+        try:
+            r = requests.post(f"{API_URL}/api/system-command",
+                            json={"action": "open-app", "parameter": app},
+                            timeout=5)
+            return f"Opening {app}"
+        except:
+            return f"Failed to open {app}"
+    
+    return None  # Not a system command
 
 def main():
     global conversation_history
@@ -476,7 +594,7 @@ def main():
                 payload = {"audio": audio_b64, "language": "en"}
 
                 r = requests.post(
-                    f"{API_URL}/api/transcribe",
+                    f"{API_URL}/api/transcribe-groq",
                     json=payload,
                     timeout=20,
                 )
@@ -506,6 +624,14 @@ def main():
                     print(f"🎵 Spotify: {music_response}")
                     speak(music_response)
                     continue # Skip sending to AI, just handle music
+
+                # Check if it's a system command
+                system_response = handle_system_command(transcription)
+
+                if system_response:
+                    print(f"💻 System: {system_response}")
+                    speak(system_response)
+                    continue
 
                 # Send to /api/ask with conversation history
                 # Build a copy of the conversation history and prepend a system instruction
